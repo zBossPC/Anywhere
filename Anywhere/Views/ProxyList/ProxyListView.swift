@@ -33,6 +33,34 @@ struct ProxyListView: View {
     }
 
     var body: some View {
+        proxyList
+            .overlay { emptyOverlay }
+            .navigationTitle("Proxies")
+            .toolbar { proxyToolbar }
+            .sheet(isPresented: $showingAddSheet) { addProxySheet }
+            .sheet(isPresented: $showingManualAddSheet) { manualAddSheet }
+            .sheet(item: $configurationToEdit) { configuration in editProxySheet(configuration) }
+            .alert("Update Failed", isPresented: $showingSubscriptionError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(subscriptionErrorMessage)
+            }
+            .alert("Rename", isPresented: renameBinding) {
+                TextField("Name", text: $renameText)
+                Button("OK") {
+                    if let subscription = renamingSubscription, !renameText.isEmpty {
+                        subscriptionStore.rename(subscription, to: renameText)
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            .onAppear {
+                collapsedSubscriptions = Set(subscriptionStore.subscriptions.filter(\.collapsed).map(\.id))
+            }
+    }
+
+    @ViewBuilder
+    private var proxyList: some View {
         List {
             Section {
                 ForEach(standaloneItems) { item in
@@ -40,99 +68,103 @@ struct ProxyListView: View {
                 }
             }
             ForEach(subscriptionStore.subscriptions) { subscription in
-                let editingDisabled = SubscriptionDomainHelper.shouldDisableProxyEditing(for: subscription.url)
-                Section {
-                    if !collapsedSubscriptions.contains(subscription.id) {
-                        ForEach(items(for: subscription)) { item in
-                            proxyRow(item, editingDisabled: editingDisabled)
-                        }
-                    }
-                } header: {
-                    subscriptionHeader(subscription)
+                subscriptionSection(subscription)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func subscriptionSection(_ subscription: Subscription) -> some View {
+        let editingDisabled = SubscriptionDomainHelper.shouldDisableProxyEditing(for: subscription.url)
+        Section {
+            if !collapsedSubscriptions.contains(subscription.id) {
+                ForEach(items(for: subscription)) { item in
+                    proxyRow(item, editingDisabled: editingDisabled)
+                }
+            }
+        } header: {
+            subscriptionHeader(subscription)
+        }
+    }
+
+    @ViewBuilder
+    private var emptyOverlay: some View {
+        if configStore.configurations.isEmpty {
+            ContentUnavailableView("No Proxies", systemImage: "network")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var proxyToolbar: some ToolbarContent {
+        if standaloneItems.count > 1 || subscriptionStore.subscriptions.count > 1 {
+            if #available(iOS 27.0, *) {
+                ToolbarItemGroup {
+                    reorderLink
+                }
+                .visibilityPriority(.low)
+            } else {
+                ToolbarItemGroup {
+                    reorderLink
                 }
             }
         }
-        .overlay {
-            if configStore.configurations.isEmpty {
-                ContentUnavailableView("No Proxies", systemImage: "network")
+
+        if #available(iOS 26.0, *) {
+            ToolbarSpacer()
+        }
+
+        ToolbarItemGroup {
+            Button(action: testAllVisibleLatencies) {
+                Label("Test All", systemImage: "gauge.with.dots.needle.67percent")
+            }
+            Button {
+                showingAddSheet = true
+            } label: {
+                Label("Add", systemImage: "plus")
             }
         }
-        .navigationTitle("Proxies")
-        .toolbar {
-            if standaloneItems.count > 1 || subscriptionStore.subscriptions.count > 1 {
-                if #available(iOS 27.0, *) {
-                    ToolbarItemGroup {
-                        NavigationLink {
-                            ReorderProxiesView()
-                        } label: {
-                            Label("Reorder Proxies", systemImage: "arrow.up.arrow.down")
-                        }
-                    }
-                    .visibilityPriority(.low)
-                } else {
-                    ToolbarItemGroup {
-                        NavigationLink {
-                            ReorderProxiesView()
-                        } label: {
-                            Label("Reorder Proxies", systemImage: "arrow.up.arrow.down")
-                        }
-                    }
-                }
-            }
-            
-            if #available(iOS 26.0, *) {
-                ToolbarSpacer()
-            }
-            
-            ToolbarItemGroup {
-                Button {
-                    let visible = configStore.configurations.filter { configuration in
-                        guard let subId = configuration.subscriptionId else { return true }
-                        return !collapsedSubscriptions.contains(subId)
-                    }
-                    viewModel.testLatencies(for: visible)
-                } label: {
-                    Label("Test All", systemImage: "gauge.with.dots.needle.67percent")
-                }
-                Button {
-                    showingAddSheet = true
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
-            }
+    }
+
+    private var reorderLink: some View {
+        NavigationLink {
+            ReorderProxiesView()
+        } label: {
+            Label("Reorder Proxies", systemImage: "arrow.up.arrow.down")
         }
-        .sheet(isPresented: $showingAddSheet) {
-            DynamicSheet(animation: .snappy(duration: 0.3, extraBounce: 0)) {
-                AddProxyView(showingManualAddSheet: $showingManualAddSheet)
-            }
+    }
+
+    private var addProxySheet: some View {
+        DynamicSheet(animation: .snappy(duration: 0.3, extraBounce: 0)) {
+            AddProxyView(showingManualAddSheet: $showingManualAddSheet)
         }
-        .sheet(isPresented: $showingManualAddSheet) {
-            ProxyEditorView { configuration in
-                configStore.add(configuration); viewModel.selectIfNone(configuration)
-            }
+    }
+
+    private var manualAddSheet: some View {
+        ProxyEditorView { configuration in
+            configStore.add(configuration)
+            viewModel.selectIfNone(configuration)
         }
-        .sheet(item: $configurationToEdit) { configuration in
-            ProxyEditorView(configuration: configuration) { updated in
-                configStore.update(updated)
-            }
+    }
+
+    private func editProxySheet(_ configuration: ProxyConfiguration) -> some View {
+        ProxyEditorView(configuration: configuration) { updated in
+            configStore.update(updated)
         }
-        .alert("Update Failed", isPresented: $showingSubscriptionError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(subscriptionErrorMessage)
+    }
+
+    private var renameBinding: Binding<Bool> {
+        Binding(
+            get: { renamingSubscription != nil },
+            set: { if !$0 { renamingSubscription = nil } }
+        )
+    }
+
+    private func testAllVisibleLatencies() {
+        let visible = configStore.configurations.filter { configuration in
+            guard let subId = configuration.subscriptionId else { return true }
+            return !collapsedSubscriptions.contains(subId)
         }
-        .alert("Rename", isPresented: Binding(get: { renamingSubscription != nil }, set: { if !$0 { renamingSubscription = nil } })) {
-            TextField("Name", text: $renameText)
-            Button("OK") {
-                if let subscription = renamingSubscription, !renameText.isEmpty {
-                    subscriptionStore.rename(subscription, to: renameText)
-                }
-            }
-            Button("Cancel", role: .cancel) { }
-        }
-        .onAppear {
-            collapsedSubscriptions = Set(subscriptionStore.subscriptions.filter(\.collapsed).map(\.id))
-        }
+        viewModel.testLatencies(for: visible)
     }
 
     // MARK: - Subscription Header
