@@ -38,12 +38,7 @@ struct ProxyListView: View {
             .navigationTitle("Proxies")
             .toolbar {
                 if standaloneItems.count > 1 || subscriptionStore.subscriptions.count > 1 {
-                    if #available(iOS 27.0, *) {
-                        ToolbarItemGroup { reorderLink }
-                            .visibilityPriority(.low)
-                    } else {
-                        ToolbarItemGroup { reorderLink }
-                    }
+                    ToolbarItemGroup { reorderLink }
                 }
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer()
