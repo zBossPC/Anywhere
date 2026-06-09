@@ -29,14 +29,14 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep iphoneos || true
 
-      - name: Build Anywhere (Release, iphoneos, unsigned)
+      - name: Build Anywhere (Debug, iphoneos, unsigned)
         run: |
           set -euo pipefail
           DERIVED_DATA="${RUNNER_TEMP}/DerivedData"
           xcodebuild \
             -project Anywhere.xcodeproj \
             -scheme Anywhere \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphoneos \
             -derivedDataPath "${DERIVED_DATA}" \
             CODE_SIGNING_ALLOWED=NO \
@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           DERIVED_DATA="${RUNNER_TEMP}/DerivedData"
-          APP_PATH="$(find "${DERIVED_DATA}" -path '*/Build/Products/Release-iphoneos/Anywhere.app' -type d | head -1)"
+          APP_PATH="$(find "${DERIVED_DATA}" -path '*/Build/Products/Debug-iphoneos/Anywhere.app' -type d | head -1)"
 
           if [[ -z "${APP_PATH}" || ! -d "${APP_PATH}" ]]; then
             echo "Anywhere.app not found under ${DERIVED_DATA}" >&2
