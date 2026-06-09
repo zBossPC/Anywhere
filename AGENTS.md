@@ -91,3 +91,28 @@ Swift toolchain (if installed on the VM): `/opt/swift/usr/bin` — add to `PATH`
 | External proxy server | N/A (user-provided) | Optional for real traffic tests |
 
 No long-running dev servers, databases, or Docker compose stacks exist in this repository.
+
+### Headless cloud compilation (GitHub Actions)
+
+Linux agents can orchestrate **unsigned IPA builds** on `macos-14` runners via `scripts/cloud-build/`:
+
+```bash
+# Validate gh auth and preview pipeline
+./scripts/cloud-build/cloud-compile.sh --dry-run --fork "$(gh api user -q .login)/Anywhere"
+
+# Full loop: inject workflow → dispatch → watch → download Anywhere.ipa
+./scripts/cloud-build/cloud-compile.sh --fork "$(gh api user -q .login)/Anywhere"
+```
+
+**Requirements:** `gh` authenticated with `repo` + `workflow` scopes (integration tokens may inject files but cannot `workflow_dispatch`).
+
+| Script | Role |
+| --- | --- |
+| `cloud-compile.sh` | Main orchestrator |
+| `lib/gh-auth.sh` | Validates `gh`; falls back to `gh auth login` |
+| `lib/fork.sh` | Idempotent fork of `NodePassProject/Anywhere` |
+| `lib/github-api.sh` | Base64 Contents API `PUT` for `.github/workflows/build.yml` |
+| `lib/workflow-watch.sh` | `workflow_dispatch`, `gh run watch`, artifact download |
+| `workflows/build.yml` | macOS build template (also at `.github/workflows/build.yml`) |
+
+Build flags: Xcode 15.4, `Release` + `iphoneos`, `CODE_SIGNING_ALLOWED=NO`, artifact `Anywhere-Unsigned-IPA`.
