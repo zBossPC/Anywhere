@@ -1,0 +1,72 @@
+name: Build Anywhere Unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build.yml'
+      - '.github/ipa-build-trigger'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macos-14 unsigned iphoneos build
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.3 toolchain
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+
+      - name: Verify Xcode toolchain
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos || true
+
+      - name: Build Anywhere (Debug, iphoneos, unsigned)
+        run: |
+          set -euo pipefail
+          DERIVED_DATA="${RUNNER_TEMP}/DerivedData"
+          xcodebuild \
+            -project Anywhere.xcodeproj \
+            -scheme Anywhere \
+            -configuration Debug \
+            -sdk iphoneos \
+            -derivedDataPath "${DERIVED_DATA}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          DERIVED_DATA="${RUNNER_TEMP}/DerivedData"
+          APP_PATH="$(find "${DERIVED_DATA}" -path '*/Build/Products/Debug-iphoneos/Anywhere.app' -type d | head -1)"
+
+          if [[ -z "${APP_PATH}" || ! -d "${APP_PATH}" ]]; then
+            echo "Anywhere.app not found under ${DERIVED_DATA}" >&2
+            find "${DERIVED_DATA}" -name 'Anywhere.app' -type d || true
+            exit 1
+          fi
+
+          rm -rf Payload Anywhere.ipa
+          mkdir -p Payload
+          cp -R "${APP_PATH}" Payload/
+          zip -qr Anywhere.ipa Payload
+          ls -lh Anywhere.ipa
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anywhere-Unsigned-IPA
+          path: Anywhere.ipa
+          if-no-files-found: error
