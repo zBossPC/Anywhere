@@ -36,7 +36,27 @@ struct ProxyListView: View {
         proxyList
             .overlay { emptyOverlay }
             .navigationTitle("Proxies")
-            .toolbar { proxyToolbar }
+            .toolbar {
+                if standaloneItems.count > 1 || subscriptionStore.subscriptions.count > 1 {
+                    if #available(iOS 27.0, *) {
+                        ToolbarItemGroup { reorderLink }
+                            .visibilityPriority(.low)
+                    } else {
+                        ToolbarItemGroup { reorderLink }
+                    }
+                }
+                if #available(iOS 26.0, *) {
+                    ToolbarSpacer()
+                }
+                ToolbarItemGroup {
+                    Button(action: testAllVisibleLatencies) {
+                        Label("Test All", systemImage: "gauge.with.dots.needle.67percent")
+                    }
+                    Button { showingAddSheet = true } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                }
+            }
             .sheet(isPresented: $showingAddSheet) { addProxySheet }
             .sheet(isPresented: $showingManualAddSheet) { manualAddSheet }
             .sheet(item: $configurationToEdit) { configuration in editProxySheet(configuration) }
@@ -91,37 +111,6 @@ struct ProxyListView: View {
     private var emptyOverlay: some View {
         if configStore.configurations.isEmpty {
             ContentUnavailableView("No Proxies", systemImage: "network")
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var proxyToolbar: some ToolbarContent {
-        if standaloneItems.count > 1 || subscriptionStore.subscriptions.count > 1 {
-            if #available(iOS 27.0, *) {
-                ToolbarItemGroup {
-                    reorderLink
-                }
-                .visibilityPriority(.low)
-            } else {
-                ToolbarItemGroup {
-                    reorderLink
-                }
-            }
-        }
-
-        if #available(iOS 26.0, *) {
-            ToolbarSpacer()
-        }
-
-        ToolbarItemGroup {
-            Button(action: testAllVisibleLatencies) {
-                Label("Test All", systemImage: "gauge.with.dots.needle.67percent")
-            }
-            Button {
-                showingAddSheet = true
-            } label: {
-                Label("Add", systemImage: "plus")
-            }
         }
     }
 
